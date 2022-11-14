@@ -1,0 +1,14 @@
+{
+  "example1": {
+    "cmd": "echo 'Example 1!'",
+    "help": "Just an example"
+  },
+  "example2": {
+    "cmd": "echo 'Example 2!'",
+    "help": "Another example"
+  },
+  "third-example": {
+    "cmd": "echo 'Third Example!'",
+    "help": "Last example"
+  }
+}

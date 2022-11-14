@@ -1,6 +1,16 @@
 Setup
   $ source "$TESTDIR"/setup.sh
 
-Run Help
+Run help as a CLI flag
   $ kd --help
-  Hello, world!
+  kd - A per-project command runner.
+  
+  USAGE:
+    $ kd <subcommand> <subcommand arguments>
+
+Run help as a subcommand
+  $ kd help
+  kd - A per-project command runner.
+  
+  USAGE:
+    $ kd <subcommand> <subcommand arguments>
