@@ -1,0 +1,14 @@
+# ============================================================================
+# Files which shouldn't be included in the containers. This is useful to make
+# sure that our program doesn't accidentally acquire accidentally acquire
+# dependencies on things it shouldn't.
+# ============================================================================
+
+.dockerignore
+.gitignore
+.git/
+
+build.sh
+docker-compose.yml
+run.sh
+shell.sh
