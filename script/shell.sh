@@ -3,11 +3,11 @@
 # Starts up a shell running in the `development` docker container.
 # Useful for debugging.
 
-THIS_DIR=$(cd -P "$(dirname "${BASH_SOURCE[0]}")" >/dev/null && pwd)
+CURRENT_DIR=$(pwd)
 
 docker run \
   --name kd-shell \
-  --volume ${THIS_DIR}:/code \
+  --volume ${CURRENT_DIR}:/code \
   --entrypoint bash \
   --interactive \
   --tty \

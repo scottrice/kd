@@ -1,0 +1,14 @@
+{
+  "build": {
+    "cmd": "script/build.sh",
+    "help": "Builds kd inside a Docker container"
+  },
+  "run": {
+    "cmd": "script/run.sh",
+    "help": "Runs kd inside a Docker container"
+  },
+  "shell": {
+    "cmd": "script/shell.sh",
+    "help": "Starts a bash shell running in the development environment container"
+  }
+}
