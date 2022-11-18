@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::env;
 use std::fs::File;
 use std::io::BufReader;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{exit, Command};
 
 use colored::Colorize;
@@ -70,16 +70,37 @@ fn print_help(config: Option<HashMap<String, SubcommandConfig>>) -> Result<()> {
     Ok(())
 }
 
-fn find_config() -> Option<File> {
-    let path = Path::new(".kdconfig");
+fn find_config() -> (Option<PathBuf>, Option<File>) {
+    let mut path = std::env::current_dir()
+        .expect("Cannot access current directory");
+    let filename = Path::new(".kdconfig");
 
-    // TODO: Make this search up the directory hierarchy.
-    // TODO: Right now we return a None any time we get an error while opening
-    //   We should treat only file-not-found as a None, and other errors like
-    //   permissions should be treated as an error state ("we have a kdconfig
-    //   but we can't open it")
-    File::open(path)
-        .ok()
+    loop {
+        path.push(filename);
+
+        match File::open(&path).map_err(|e| e.kind() ) {
+            Ok(file) => {
+                // Remove filename from the path, leaving the directory.
+                path.pop();
+                return (Some(path), Some(file))
+            }
+            // File not found will be given when there is no .kdconfig in the
+            // current directory. In that scenario, just move up a directory
+            Err(std::io::ErrorKind::NotFound) => {
+                // one pop for the filename we added, one for the directory
+                // If one of these calls fails, it means we have reached the
+                // root of the filesystem and didn't find anything.
+                if !(path.pop() && path.pop()) {
+                    return (None, None)
+                }
+            }
+            // TODO: We found a file but can't access it (likely for
+            // permissions reasons). We should give the user a better error
+            // message here, but right now we return the same thing as if we
+            // couldn't find a kdconfig at all.
+            Err(_) => return (None, None),
+        }
+    }
 }
 
 fn parse_config(file: File) -> Result<HashMap<String, SubcommandConfig>> {
@@ -91,7 +112,7 @@ fn parse_config(file: File) -> Result<HashMap<String, SubcommandConfig>> {
     Ok(config)
 }
 
-fn execute_cmd(config: &SubcommandConfig) -> Result<i32> {
+fn execute_cmd(config: &SubcommandConfig, config_directory: &Path) -> Result<i32> {
     let mut cmd = shell_words::split(&config.cmd)
         .context("while parsing the subcommand's `cmd` field")?;
 
@@ -102,6 +123,7 @@ fn execute_cmd(config: &SubcommandConfig) -> Result<i32> {
     // Actually execute the cmd process
     let mut process = Command::new(program)
         .args(args)
+        .current_dir(config_directory)
         .spawn()
         .context("Error while spawning subprocess. Likely the program doesn't exist.")?;
     let status = process.wait()
@@ -113,12 +135,12 @@ fn execute_cmd(config: &SubcommandConfig) -> Result<i32> {
     status.code().ok_or_else(|| anyhow!("Process terminated by signal"))
 }
 
-fn run_subcommand(config_optional: Option<HashMap<String, SubcommandConfig>>, subcommand: &str) -> Result<i32> {
+fn run_subcommand(config_optional: Option<HashMap<String, SubcommandConfig>>, subcommand: &str, config_directory: &Path) -> Result<i32> {
     if let Some(config) = config_optional {
         // We do have a `.kdconfig`.
         if let Some(subcommand_config) = config.get(subcommand) {
             // And we have an entry for the subcommand the user entered.
-            let exitcode = execute_cmd(subcommand_config)
+            let exitcode = execute_cmd(subcommand_config, config_directory)
                 .context("while running subcommand")?;
             Ok(exitcode)
         } else {
@@ -140,7 +162,10 @@ fn main() -> Result<()> {
 
     let subcommand = &args[1];
 
-    let config = find_config()
+    // TODO: Clean this up and put it in an struct with the actual config values
+    let (config_directory, config_file) = find_config();
+
+    let config = config_file
         .map(|path| parse_config(path))
         .transpose()
         .context("Failed to parse the config file")?;
@@ -152,7 +177,7 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    let exitcode = run_subcommand(config, subcommand)
+    let exitcode = run_subcommand(config, subcommand, &config_directory.expect("Expecting a directory"))
         .context("while trying to run the subcommand")?;
     exit(exitcode);
 }
