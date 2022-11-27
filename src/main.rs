@@ -2,12 +2,14 @@ mod kdconfig;
 
 use std::env;
 use std::fs::File;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{exit, Command};
 
 use anyhow::{anyhow, Context, Result};
 use colored::Colorize;
 use itertools::Itertools;
+use rand::Rng;
 use shell_words;
 
 use kdconfig::{KdConfig, SubcommandConfig};
@@ -98,13 +100,64 @@ fn find_config() -> Option<(PathBuf, File)> {
     }
 }
 
+fn subcommand_args() -> Vec<String> {
+    let mut all_args: Vec<String> = env::args().collect();
+
+    // Remove the first two arguments to `kd`. argv[0] is obviously the path to
+    // kd itself, and argv[1] is the subcommand. Neither get forwarded on.
+    all_args.split_off(2)
+}
+
+fn write_to_temp_file(args: Vec<String>) -> PathBuf {
+    let mut rng = rand::thread_rng();
+
+    let filename = format!("kd-{}", rng.gen::<u32>());
+    let mut argsfile = env::temp_dir();
+    argsfile.push(filename);
+
+    // TODO: We throw error handling out the window here, which is not good.
+    // Make this handle errors gracefully.
+    let mut writer = File::create(&argsfile).unwrap();
+    for arg in args {
+        writeln!(&mut writer, "{}", arg)
+            .expect("Failed while writing argument to argsfile");
+    }
+
+    argsfile
+}
+
+fn replace_magic_strings_with_kd_args(raw_args: Vec<String>) -> Vec<String> {
+    let mut result: Vec<String> = Vec::new();
+    for arg in raw_args {
+        if arg == "{{ARGS}}" {
+            let mut kdargs = subcommand_args();
+            result.append(&mut kdargs);
+        } else if arg == "{{ARGSFILE}}" {
+            // TODO: Should we be worried about not being able to turn our path
+            // into a string?
+            let tmppath = write_to_temp_file(subcommand_args())
+                .into_os_string()
+                .into_string()
+                .unwrap();
+            result.push(tmppath);
+        } else {
+            // Static argument - just add it in place
+            result.push(arg);
+        }
+    }
+
+    result
+}
+
 fn execute_cmd(config: &SubcommandConfig, config_directory: &Path) -> Result<i32> {
     let mut cmd = shell_words::split(&config.cmd)
         .context("while parsing the subcommand's `cmd` field")?;
 
     // TODO: Figure out if anything breaks when we have nonstandard commands
-    let args = cmd.split_off(1);
+    let raw_args = cmd.split_off(1);
     let program = &cmd[0];
+
+    let args = replace_magic_strings_with_kd_args(raw_args);
 
     // Actually execute the cmd process
     let mut process = Command::new(program)
